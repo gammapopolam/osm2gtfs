@@ -13,14 +13,14 @@ class OSM_Grabber:
         # types of routes: bus, tram, trolleybus, subway, commuter
         # network (Московский транспорт)
         # operator (ГУП "Мосгортранс")
-        # area - либо relation id, либо какой-то идентификатор. в случае Москвы - ["ref"="RU-MOW"]
+        # area - area id
         self.overpass_url="https://overpass-api.de/api/interpreter"
         self.type=type
-        area=3600000000 + area
+        self.area=3600000000 + area
         if self.type!='commuter':
-            base_query=f'[out:json][timeout:25];area({area})->.searchArea;nwr["route"={self.type}]'
+            base_query=f'[out:json][timeout:25];area({self.area})->.searchArea;nwr["route"={self.type}]'
         else:
-            base_query=f'[out:json][timeout:25];area({area})->.searchArea;nwr["route"="train"]["service"="commuter"]'
+            base_query=f'[out:json][timeout:25];area({self.area})->.searchArea;nwr["route"="train"]["service"="commuter"]'
 
         if network is not None:
             base_query+=f'["network"="{network}"]'
@@ -28,7 +28,7 @@ class OSM_Grabber:
             base_query+=f'["operator"="{operator}"]'
         base_query+='(area.searchArea);out geom;'
         self.query=base_query
-        print(self.overpass_url+'?data='+self.query)
+        #print(self.overpass_url+'?data='+self.query)
     def fetch(self, out_dir=None):
         response = requests.get(self.overpass_url, params={'data': self.query})
 
@@ -137,11 +137,10 @@ class OSM_Grabber:
         geoms=shapely.geometry.MultiLineString(geom)
         return geoms
     def fetch_stops(self, stops):
-        #! area как переменная
         stops_info=[]
         platform_query=lambda ref: f'''
         [out:json][timeout:25];
-        area["RU-MOW"]->.searchArea;
+        area({self.area})->.searchArea;
         nwr({ref})["public_transport"="platform"];
         out geom;'''
         data=[]
