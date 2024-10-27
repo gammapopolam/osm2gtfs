@@ -17,8 +17,11 @@ class OSM_Grabber:
         self.overpass_url="https://overpass-api.de/api/interpreter"
         self.type=type
         area=3600000000 + area
-        base_query=f'[out:json][timeout:25];area({area})->.searchArea;nwr["route"={self.type}]'
-        
+        if self.type!='commuter':
+            base_query=f'[out:json][timeout:25];area({area})->.searchArea;nwr["route"={self.type}]'
+        else:
+            base_query=f'[out:json][timeout:25];area({area})->.searchArea;nwr["route"="train"]["service"="commuter"]'
+
         if network is not None:
             base_query+=f'["network"="{network}"]'
         if operator is not None:
@@ -179,4 +182,4 @@ class OSM_Grabber:
                         wheelchair='no'
                 stops_info.append({'stop_id': el['id'], 'stop_name': name, 'stop_shape': geom.wkt, 'wheelchair': wheelchair}) #!!
         return stops_info
-OSM_Grabber(type='bus', network=None, area=1430616).fetch(out_dir='kja')
+OSM_Grabber(type='commuter', network=None, area=173790).fetch('lobnya')
