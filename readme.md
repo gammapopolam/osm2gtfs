@@ -1,6 +1,6 @@
 # OSM2GTFS - a simple scripts to get GTFS from OSM
 
-Some scripts to get GTFS from OSM in area id. Make sure that routes is in [OSM PTv2 schema](https://wiki.openstreetmap.org/wiki/Public_transport):
+Some scripts to get GTFS from OSM in area id. Make sure that routes are in [OSM PTv2 schema](https://wiki.openstreetmap.org/wiki/Public_transport):
 
 - each route has an `public_transport:version=2`, `ref`, `name`  tag
 - in each route relation the participants ordered like:
@@ -55,7 +55,7 @@ The JSON Schema of `stops`:
 ]
 
 ```
-These JSON's can be simply rebuilded into [networkx](https://github.com/networkx/networkx) DiGraph, because `stops` and `trips` forms L-space of transit network 
+These JSON's can be simply rebuilded into [networkx](https://github.com/networkx/networkx) DiGraph, because `stops` and `trips` can be implemented as L-space of transit network 
 # osm2gtfs
 
 TBA
