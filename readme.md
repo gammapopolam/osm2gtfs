@@ -17,21 +17,24 @@ platform_exit_only: platform
 ...
    : road segment N by trip continuality
 ```
+
+By default scripts locate stop_position along route shape and gets stop2stop connections
+
 # osm_grabber
 Download the script into your working directory:
 ```python
 from osm_grabber import OSM_Grabber
 # Available types are bus, tram, trolleybus, subway, commuter 
 # Each type of transport should be initialized separately 
-trips, stops = OSM_Grabber(type='bus', network=None, operator=None, area=1430616).fetch()
+# Enable stop2stop connections if you want to get L-space
+trips, stops = OSM_Grabber(type='bus', network=None, operator=None, area=1430616).fetch(s2s=True)
 # or save json's in directory
-OSM_Grabber(type='bus', network=None, operator=None, area=1430616).fetch(out_dir='kja')
+OSM_Grabber(type='bus', network=None, operator=None, area=1430616).fetch(s2s=True, out_dir='kja')
 ```
 
 The JSON Schema of `trips`:
 ```
-{
-    <relation id>: 
+[
         {
             'platform_sequence': list, 
             'shape': wkt, 
@@ -40,7 +43,7 @@ The JSON Schema of `trips`:
             'route_id': <relation id>,
             'route_name': str
         }
-}
+]
 ```
 
 The JSON Schema of `stops`:
@@ -50,12 +53,24 @@ The JSON Schema of `stops`:
             'stop_id': <nwr id>, 
             'stop_name': str, 
             'stop_shape': wkt, 
-            'wheelchair': str yes/no, 
+            'wheelchair': str yes/no
         }
 ]
-
 ```
-These JSON's can be simply rebuilded into [networkx](https://github.com/networkx/networkx) DiGraph, because `stops` and `trips` can be implemented as L-space of transit network 
+The JSON Schema of `s2s`:
+```
+[
+    {
+        'from': <stop id>,
+        'to': <stop_id>,
+        'shape': wkt,
+        'length': float,
+        'trip_ref': str,
+        'trip_id': <relation id>
+    }
+]
+```
+These JSON's can be simply rebuilded into [networkx](https://github.com/networkx/networkx) DiGraph, because `stops` and `s2s` can be implemented as L-space of transit network 
 # osm2gtfs
 
 TBA
