@@ -18,7 +18,7 @@ platform_exit_only: platform
    : road segment N by trip continuality
 ```
 
-By default scripts locate stop_position along route shape and gets stop2stop connections
+By default scripts locate stop_position along route shape and gets stop2stop connections. It is not properly correct because this approach implements single subway platform as two stops (TODO)
 
 # osm_grabber
 Download the script into your working directory:
@@ -70,7 +70,7 @@ The JSON Schema of `s2s`:
     }
 ]
 ```
-These JSON's can be simply rebuilded into [networkx](https://github.com/networkx/networkx) DiGraph, because `stops` and `s2s` can be implemented as L-space of transit network 
+These JSON's can be simply rebuilded into [networkx](https://github.com/networkx/networkx) DiGraph, because `stops` and `s2s` can be implemented as L-space of transit network.
 # osm2gtfs
 
 TBA
