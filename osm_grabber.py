@@ -31,10 +31,11 @@ class OSM_Grabber:
         self.query=base_query
         #print(self.overpass_url+'?data='+self.query)
     def fetch(self, s2s=True, out_dir=None):
+        print(self.query)
         response = requests.get(self.overpass_url, params={'data': self.query})
 
         if response.status_code==400:
-            raise ValueError('There is a problem with your request.\nThe problem may be the search area. Try to use (<relid>) with polygon relid from OSM')
+            raise ValueError('There is a problem with your request. Check area <rel id>')
         elif response.status_code==200:
             data = response.json()
             self.valid, self.invalid = self.check_ptv2(data)
@@ -124,12 +125,20 @@ class OSM_Grabber:
                 members=elem['members']
                 
                 for member in members:
-                    if member['role']=='stop_entry_only' or member['role']=='stop' or member['role']=='stop_exit_only':
-                        trip_stop_sequence.append(str(member['ref']))
-                        if str(member['ref']) not in refs:
-                            refs.append(str(member['ref']))
-                    elif member['role']=='' and member['type']=='way':
-                        trip_shape.append(member)
+                    if self.type=='subway' or self.type=='commuter':
+                        if member['role']=='platform_entry_only' or member['role']=='platform' or member['role']=='platform_exit_only':
+                            trip_stop_sequence.append(str(member['ref']))
+                            if str(member['ref']) not in refs:
+                                refs.append(str(member['ref']))
+                        elif member['role']=='' and member['type']=='way':
+                            trip_shape.append(member)
+                    else:
+                        if member['role']=='stop_entry_only' or member['role']=='stop' or member['role']=='stop_exit_only':
+                            trip_stop_sequence.append(str(member['ref']))
+                            if str(member['ref']) not in refs:
+                                refs.append(str(member['ref']))
+                        elif member['role']=='' and member['type']=='way':
+                            trip_shape.append(member)
                 trip_shape_g=self.build_shape(trip_shape)
                 if self.type=='bus':
                     shape_merged=self.merge_shape_simple(trip_shape_g)
@@ -149,11 +158,15 @@ class OSM_Grabber:
         geoms=shapely.geometry.MultiLineString(geom)
         return geoms
     def fetch_stops(self, stops):
+        if self.type=='subway' or self.type=='commuter':
+            tag='platform'
+        else:
+            tag='stop_position'
         stops_info=[]
         platform_query=lambda ref: f'''
         [out:json][timeout:25];
         area({self.area})->.searchArea;
-        nwr({ref})["public_transport"="stop_position"];
+        nwr({ref})["public_transport"="{tag}"];
         out geom;'''
         data=[]
         for i in range(0, len(stops), 100):
@@ -221,11 +234,46 @@ class OSM_Grabber:
             for i in range(len(trip_s_sequence)-1):
                 stop_1 = self.wgs84toutm(shapely.wkt.loads(list(filter(lambda x : str(x['stop_id'])==trip_s_sequence[i], self.stops))[0]['stop_shape']))
                 stop_2 = self.wgs84toutm(shapely.wkt.loads(list(filter(lambda x : str(x['stop_id'])==trip_s_sequence[i+1], self.stops))[0]['stop_shape']))
-                segment=self.cut_shape_by_stops(shape_geom_ext, stop_1, stop_2)
+                # The main point of next lines is that routes on rail network can be located along non-unique platforms (i.e. island and shore types of platform), but it is not working properly for bus and tram.
+                # That's why I use here platforms for subway/commuter and stop_positions for bus/tram
+                if self.type=='subway' or self.type=='commuter':
+                    segment=self.cut_shape_by_stops(shape_geom, stop_1, stop_2)
+                else:
+                    segment=self.cut_shape_by_stops_bus(shape_geom_ext, stop_1, stop_2)
                 dist=segment.length
                 self.stop2stop.append({'from': trip_s_sequence[i], 'to': trip_s_sequence[i+1], 'shape': self.utmtowgs84(segment).wkt, 'length': dist, 'trip_ref': trip['ref'], 'trip_id': trip['route_id']})
         return self.stop2stop
     def cut_shape_by_stops(self, shape, stop_1, stop_2):
+        # Эта функция привязывает точки остановок к шейпу маршрута, проводит линию между ними для получения сегмента пути.
+        stop_1_on_shape = shapely.ops.nearest_points(shape, stop_1)[0]
+        stop_2_on_shape = shapely.ops.nearest_points(shape, stop_2)[0]
+        dx_stop1=(stop_1.x-stop_1_on_shape.x)*1.2
+        dy_stop1=(stop_1.y-stop_1_on_shape.y)*1.2
+        
+        dx_stop2=(stop_2.x-stop_2_on_shape.x)*1.2
+        dy_stop2=(stop_2.y-stop_2_on_shape.y)*1.2
+
+        ep_stop1=shapely.geometry.LineString([(stop_1.x-dx_stop1, stop_1.y-dy_stop1), (stop_1_on_shape.x+dx_stop1, stop_1_on_shape.y+dy_stop1)])
+        ep_stop2=shapely.geometry.LineString([(stop_2.x-dx_stop2, stop_2.y-dy_stop2), (stop_2_on_shape.x+dx_stop2, stop_2_on_shape.y+dy_stop2)])
+        segment_start=shape.difference(ep_stop1)
+
+        if segment_start.is_empty==False:
+            segment=segment_start.difference(ep_stop2)
+        else:
+            segment=shape.difference(ep_stop2)
+        le=math.inf
+        little=None
+        if type(segment)==shapely.geometry.multilinestring.MultiLineString:
+            for s in segment.geoms:
+                if le>s.length:
+                    le=s.length
+                    little=s
+            segment=little
+        else:
+            segment=segment
+        return segment
+    def cut_shape_by_stops_bus(self, shape, stop_1, stop_2):
+        
         i_s, i_e = 0, 0
         for i in range(len(list(shape.coords))):
             v=list(shape.coords)[i]
@@ -340,4 +388,3 @@ class OSM_Grabber:
             if p not in ordered[-2:]:
                 ordered.append(p)
         return shapely.geometry.LineString(ordered)
-OSM_Grabber(type='bus', network=None, area=1281220).fetch(s2s=True, out_dir='akadem')

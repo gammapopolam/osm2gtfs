@@ -18,7 +18,10 @@ platform_exit_only: platform
    : road segment N by trip continuality
 ```
 
-By default scripts locate stop_position along route shape and gets stop2stop connections. It is not properly correct because this approach implements single subway platform as two stops (TODO)
+How it works:
+1. Get all routes of specified type within area relation id from OSM by overpass-turbo API
+2. If subway or commuter specified, get platforms of each route. Else - get stop_positions
+3. Rebuild responses to json by schema below
 
 # osm_grabber
 Download the script into your working directory:
@@ -32,11 +35,13 @@ trips, stops = OSM_Grabber(type='bus', network=None, operator=None, area=1430616
 OSM_Grabber(type='bus', network=None, operator=None, area=1430616).fetch(s2s=True, out_dir='kja')
 ```
 
+By default it highlights potentially invalid route relation ids if there could be mismatches between stops and platforms counts
+
 The JSON Schema of `trips`:
 ```
 [
         {
-            'platform_sequence': list, 
+            'stop_sequence': list, 
             'shape': wkt, 
             'colour': str, 
             'ref': str, 
