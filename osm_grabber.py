@@ -99,7 +99,19 @@ class OSM_Grabber:
         print('Total invalid: ', len(invalid))
         print('Total: ', len(data['elements']))
         return valid, invalid
-    
+    def get_master(self, trip_id):
+        master_query=f'''
+        [out:json][timeout:25];
+        relation({trip_id});
+        out body;(._; <<;);out ids;'''
+        response = requests.get(self.overpass_url, params={'data': master_query})
+        data = response.json()
+        master=None
+        # /!\ Плохо пахнет, потому что не могу понять как проще всего вытянуть route_master для 
+        for i in range(len(data['elements'])):
+            if data['elements'][i]['type']=='relation' and data['elements'][i]['id']!=trip_id and data['elements'][i]['id']!=7296688:
+                master=data['elements'][i]['id'] # плохо пахнет
+        return master
     def rebuild_data(self, data):
         refs=[]
         trips=[]
@@ -145,7 +157,9 @@ class OSM_Grabber:
                 else:
                     shape_merged=shapely.ops.linemerge(trip_shape_g)
                 route_id=elem['id']
-                trips.append({'stop_sequence': trip_stop_sequence, 'shape': shape_merged.wkt, 'colour': trip_colour, 'ref': trip_ref, 'route_id': route_id, 'route_name': trip_name})
+                master=self.get_master(route_id)
+                trips.append({'stop_sequence': trip_stop_sequence, 'shape': shape_merged.wkt, 'colour': trip_colour, 'ref': trip_ref, 'route_id': route_id, 'route_name': trip_name, 'route_master': master})
+                print(route_id, master)
         refs=list(set(refs))
         stops=self.fetch_stops(refs)
         return trips, stops
