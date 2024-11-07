@@ -124,10 +124,14 @@ class OSM2GTFS:
             shape=shapely.wkt.loads(trip['shape'])
             trip_name=trip['route_name']
             trip_id=trip['route_id']
+            if trip['route_master']=='NONE':
+                route_id=trip['route_id']
+            else:
+                route_id=trip['route_master']
             shape_id=str(trip_id)+'_shp'
             dir=0
             # /!\ Currently, each trip is an unique route id. It is not properly correct. Don't really know how to handle it optimized
-            self.trips_df.loc[len(self.trips_df.index)] = [trip_id, 0, trip_id, trip_name, dir, shape_id]
+            self.trips_df.loc[len(self.trips_df.index)] = [route_id, 0, trip_id, trip_name, dir, shape_id]
 
             base_time='00:00:00'
             minutes=0
@@ -139,7 +143,7 @@ class OSM2GTFS:
                 stop_n = stop_sequence[i+1]
                 leg=self.find_leg(stop_c, stop_n, trip_id)
                 speed_min=self.speed*1000/60
-                traveltime=int((shapely.wkt.loads(leg['shape']).length)/speed_min)+1
+                traveltime=int((leg['length'])/speed_min)+1
                 minutes+=traveltime
                 time=self.minutes2hhmm(minutes)
                 s+=1
@@ -162,8 +166,11 @@ class OSM2GTFS:
             route_type='1'
         for trip in self.trips:
             color=trip['colour'].replace('black', '#000000').replace('red', '##FF0000')
-            self.routes_df.loc[len(self.routes_df.index)]=[trip['route_id'], '0', trip['ref'], trip['route_name'], route_type, color, '']
-
+            if trip['route_master']!=None:
+                self.routes_df.loc[len(self.routes_df.index)]=[trip['route_master'], '0', trip['route_master_ref'], trip['route_master_name'].replace('<', '').replace('>', '').replace('=', '-'), route_type, color, '']
+            else:
+                self.routes_df.loc[len(self.routes_df.index)]=[trip['route_id'], '0', trip['ref'], trip['route_name'].replace('<', '').replace('>', '').replace('=', '-'), route_type, color, '']
+        self.routes_df.drop_duplicates(subset='route_id', keep='first', inplace=True)
     def export(self, gtfs_dir):
         self.agency_df.to_csv(f'{gtfs_dir}/agency.txt', index=False, sep=',', header=True)
         self.stops_df.to_csv(f'{gtfs_dir}/stops.txt', index=False, sep=',', header=True)

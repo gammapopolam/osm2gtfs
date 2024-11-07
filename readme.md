@@ -53,7 +53,10 @@ The JSON Schema of `trips`:
             'colour': str, 
             'ref': str, 
             'route_id': <relation id>,
-            'route_name': str
+            'route_name': str,
+            'route_master': <relation id> / NONE
+            'route_master_name': str / NONE
+            'route_master_ref': str / NONE
         }
 ]
 ```
