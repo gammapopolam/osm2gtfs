@@ -20,13 +20,14 @@ class OSM_Grabber:
         self.area=3600000000 + area
         if self.type!='commuter':
             base_query=f'[out:json][timeout:25];area({self.area})->.searchArea;nwr["route"={self.type}]'
+            if network is not None:
+                base_query+=f'["network"="{network}"]'
+            if operator is not None:
+                base_query+=f'["operator"="{operator}"]'
+        # /!\ Messy query due to issues with commuter routes
         else:
-            base_query=f'[out:json][timeout:25];area({self.area})->.searchArea;nwr["route"="train"]["service"="commuter"]'
-
-        if network is not None:
-            base_query+=f'["network"="{network}"]'
-        if operator is not None:
-            base_query+=f'["operator"="{operator}"]'
+            base_query=f'[out:json][timeout:25];area({self.area})->.searchArea;nwr(id:10309186,10309185,10309307,10309306,16213701,16213700,16272077,16272078,6548266,6548267)["route"="train"]["service"="commuter"]'
+        
         base_query+='(area.searchArea);<<;out body geom;'
         self.query=base_query
         #print(self.overpass_url+'?data='+self.query)
@@ -74,6 +75,7 @@ class OSM_Grabber:
                 else:
                     print(elem['tags']['ref'], elem['id'], 'Invalid counts', count_stop_entry_only, '=', count_pl_entry_only, count_stop, '=', count_pl, count_stop_exit_only, '=', count_pl_exit_only)
                     continue_stop_pl=1
+                # /!\ Messy validator that is not working at all
                 for j in range(len(members)-1, 2):
                     m_c, m_n = members[j], members[j+1] # current, next
                     if m_c['role']!='':
@@ -145,9 +147,14 @@ class OSM_Grabber:
                 trips.append({'stop_sequence': trip_stop_sequence, 'shape': shape_merged.wkt, 'colour': trip_colour, 'ref': trip_ref, 'route_id': route_id, 'route_name': trip_name, 'route_master': 'NONE', 'route_master_name': 'NONE', 'route_master_ref': 'NONE'})
         for elem in data:
             if 'route_master' in elem['tags']:
+                print(elem['tags'])
                 master=elem['id']
-                master_name=elem['tags']['name']
-                master_ref=elem['tags']['ref']
+                if 'name' in elem['tags'].keys():
+                    master_name=elem['tags']['name']
+                else: master_name='UNKNOWN'
+                if 'ref' in elem['tags'].keys():
+                    master_ref=elem['tags']['ref']
+                else: master_ref='UNKNOWN'
                 childs=[]
                 for member in elem['members']:
                     childs.append(member['ref'])

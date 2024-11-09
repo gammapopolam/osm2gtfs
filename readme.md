@@ -27,7 +27,6 @@ Note: the procedure can take a very long time due to the shortcomings of the scr
 
 4. Assembling base GTFS from JSON's
 
-Note: due to issues with route_master relations, for each trip there is a unique route with same trip_id and route_id. I am trying to solve it.\
 Base GTFS - a GTFS dataset which has no schedules for trips but only their base stop_times from 00:00:00. You need to add or model schedules for public transport by yourself.
 
 # osm_grabber
@@ -88,7 +87,7 @@ The JSON Schema of `s2s`:
 These JSON's can be simply rebuilded into [networkx](https://github.com/networkx/networkx) DiGraph, because `stops` and `s2s` can be implemented as L-space of transit network.
 # osm2gtfs
 
-Download the script into your working directory:
+After grabbing OSM data in trips.json, s2s.json, stops.json, download the script into your working directory and run:
 ```python
 from osm2gtfs import OSM2GTFS
 
@@ -103,4 +102,15 @@ tram.add_trips() # Add trips from tram_trips.json
 tram.add_routes() # Add routes from tram_trips.json
 # Export GTFS to directory
 tram.export(gtfs_dir=r"path/to/gtfs_base_tram")
+```
+To validate and combine GTFS datasets, use class `GTFS_Dataset`:
+```python
+from osm2gtfs import GTFS_Dataset, combine_gtfs_datasets
+
+tram_feed = GTFS_Dataset('gtfs_base_tram')
+metro_feed = GTFS_Dataset('gtfs_base_subway')
+commuter_feed = GTFS_Dataset('gtfs_base_comm')
+bus_feed = GTFS_Dataset('gtfs_base_bus')
+
+combine_gtfs_datasets([tram_feed, metro_feed, commuter_feed, bus_feed], 'ru-mow')
 ```
