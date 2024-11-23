@@ -167,7 +167,7 @@ class OSM2GTFS:
     def add_routes(self):
         if self.type=='tram' or self.type=='commuter':
             route_type='0'
-        elif self.type=='bus':
+        elif self.type=='bus' or self.type=='trolleybus':
             route_type='3'
         elif self.type=='subway':
             route_type='1'

@@ -124,7 +124,7 @@ class OSM_Grabber:
                 members=elem['members']
                 
                 for member in members:
-                    if self.type=='subway' or self.type=='commuter':
+                    if self.type=='subway' or self.type=='commuter' or self.type=='tram':
                         if member['role']=='platform_entry_only' or member['role']=='platform' or member['role']=='platform_exit_only':
                             trip_stop_sequence.append(str(member['ref']))
                             if str(member['ref']) not in refs:
@@ -139,7 +139,7 @@ class OSM_Grabber:
                         elif member['role']=='' and member['type']=='way':
                             trip_shape.append(member)
                 trip_shape_g=self.build_shape(trip_shape)
-                if self.type=='bus':
+                if self.type=='bus' or self.type=='trolleybus':
                     shape_merged=self.merge_shape_simple(trip_shape_g)
                 else:
                     shape_merged=shapely.ops.linemerge(trip_shape_g)
@@ -175,7 +175,7 @@ class OSM_Grabber:
         geoms=shapely.geometry.MultiLineString(geom)
         return geoms
     def fetch_stops(self, stops):
-        if self.type=='subway' or self.type=='commuter':
+        if self.type=='subway' or self.type=='commuter' or self.type=='tram':
             tag='platform'
         else:
             tag='stop_position'
@@ -185,12 +185,14 @@ class OSM_Grabber:
         area({self.area})->.searchArea;
         nwr({ref})["public_transport"="{tag}"];
         out geom;'''
+        
         data=[]
         for i in range(0, len(stops), 100):
             partial=stops[i:i+100]
             ref='id:'+','.join(partial)
             print(f'partial {i}:{i+100}', end=' ')
             time.sleep(1)
+            #print(platform_query(ref))
             response = requests.get(self.overpass_url, params={'data': platform_query(ref)})
             print(response.status_code)
             partial_data=response.json()['elements']
@@ -245,6 +247,7 @@ class OSM_Grabber:
         #for trip_id in tqdm(list(trips.keys()), ncols=100, ascii=True, desc='Total'):
         for trip in tqdm(trips, ncols=100, ascii=True, desc='s2s connections'):
             trip_s_sequence=trip['stop_sequence']
+            #print(trip)
             shape_geom=self.wgs84toutm(shapely.wkt.loads(trip['shape']))
             trip_s_sequence_shapes=self.get_shapes_of_stop_sequence(trip_s_sequence)
             shape_geom_ext=self.insert_stops_into_route(shape_geom, trip_s_sequence_shapes)
@@ -253,7 +256,7 @@ class OSM_Grabber:
                 stop_2 = self.wgs84toutm(shapely.wkt.loads(list(filter(lambda x : str(x['stop_id'])==trip_s_sequence[i+1], self.stops))[0]['stop_shape']))
                 # The main point of next lines is that routes on rail network can be located along non-unique platforms (i.e. island and shore types of platform), but it is not working properly for bus and tram.
                 # That's why I use here platforms for subway/commuter and stop_positions for bus/tram
-                if self.type=='subway' or self.type=='commuter':
+                if self.type=='subway' or self.type=='commuter' or self.type=='tram':
                     segment=self.cut_shape_by_stops(shape_geom, stop_1, stop_2)
                 else:
                     segment=self.cut_shape_by_stops_bus(shape_geom_ext, stop_1, stop_2)
@@ -291,14 +294,30 @@ class OSM_Grabber:
         return segment
     def cut_shape_by_stops_bus(self, shape, stop_1, stop_2):
         
-        i_s, i_e = 0, 0
-        for i in range(len(list(shape.coords))):
+        i_s, i_e = [], []
+        l=len(list(shape.coords))
+        #print(l)
+        # The problem that some route share same segments and is being round. It moves through vertices in the start and in the end, so this alg gives last indices of vertices  
+        for i in range(l):
             v=list(shape.coords)[i]
             if shapely.geometry.Point(v).equals(stop_1):
-                i_s=i
+                i_s.append(i)
             if shapely.geometry.Point(v).equals(stop_2):
-                i_e=i
-        return shapely.geometry.LineString(list(shape.coords)[i_s:i_e+1])
+                i_e.append(i)
+        #print(i_s, i_e)
+        if len(i_s)>1 and len(i_e)==1:
+            for k in range(len(i_s)):
+                if abs(i_e[0]-i_s[k])<50:
+                    print(i_s[k], i_e[0])
+                    return shapely.geometry.LineString(list(shape.coords)[i_s[k]:i_e[0]+1])
+        elif len(i_e)>1 and len(i_s)==1:
+            for k in range(len(i_e)):
+                if abs(i_e[k]-i_s[0])<50:
+                    print(i_s[0], i_e[k])
+                    return shapely.geometry.LineString(list(shape.coords)[i_s[0]:i_e[k]+1])
+        else:
+            print(i_s[0], i_e[0])
+            return shapely.geometry.LineString(list(shape.coords)[i_s[0]:i_e[0]+1])
     def insert_stops_into_route(self, route, stops):
         # Create a list to hold all points (original route + stops)
         all_points = list(route.coords)
