@@ -142,7 +142,26 @@ class OSM_Grabber:
                 if self.type=='bus' or self.type=='trolleybus':
                     shape_merged=self.merge_shape_simple(trip_shape_g)
                 else:
+                    #print('merged shape')
                     shape_merged=shapely.ops.linemerge(trip_shape_g)
+                    if shape_merged.coords[0]==shape_merged.coords[-1]: #circle
+                        #find first stop, find nearest vertex to stop, start from this vertex
+                        first_ref=trip_stop_sequence[0]
+                        first_stop=shapely.from_wkt(self.fetch_stop(first_ref)['stop_shape'])
+                        little=math.inf
+                        pmi=0
+                        for i in range(len(shape_merged.coords)):
+                            c=shape_merged.coords[i]
+                            p=shapely.Point(c)
+                            le=p.distance(first_stop)
+                            if le<little:
+                                pmi=i
+                                little=le
+                        refab=[*shape_merged.coords[pmi:]]
+                        refab.extend(shape_merged.coords[:pmi+1])
+                        shape_merged=shapely.LineString(refab)
+                        
+                    #print(shape_merged)
                 route_id=elem['id']
                 trips.append({'stop_sequence': trip_stop_sequence, 'shape': shape_merged.wkt, 'colour': trip_colour, 'ref': trip_ref, 'route_id': route_id, 'route_name': trip_name, 'route_master': 'NONE', 'route_master_name': 'NONE', 'route_master_ref': 'NONE'})
         for elem in data:
@@ -174,6 +193,48 @@ class OSM_Grabber:
             geom.append(shapely.geometry.LineString(coords))
         geoms=shapely.geometry.MultiLineString(geom)
         return geoms
+    def fetch_stop(self, stop):
+        if self.type=='subway' or self.type=='commuter' or self.type=='tram':
+            tag='platform'
+        else:
+            tag='stop_position'
+        stops_info=None
+        platform_query=lambda ref: f'''
+        [out:json][timeout:25];
+        area({self.area})->.searchArea;
+        nwr({ref})["public_transport"="{tag}"];
+        out geom;'''
+        response = requests.get(self.overpass_url, params={'data': platform_query(stop)})
+        data=response.json()['elements']
+        for el in data:
+            if 'tags' in el.keys():
+                if 'public_transport' in el['tags'].keys():
+                    if 'name' in el['tags'].keys():
+                        name=el['tags']['name']
+                    # need refactor bc previously there was platforms 
+                    if 'lon' in el.keys():
+                        # platform is point
+                        geom=shapely.geometry.Point(el['lon'], el['lat'])
+                    elif 'geometry' in el.keys():
+                        #platform is way
+                        ps=[]
+                        for g in el['geometry']:
+                            ps.append([g['lon'], g['lat']])
+                        geom=shapely.geometry.MultiPoint(ps).centroid
+                    else:
+                        #platform is multipolygon
+                        members=el['members']
+                        ps=[]
+                        for member in members:
+                            for g in member['geometry']:
+                                ps.append([g['lon'], g['lat']])
+                        geom=shapely.geometry.MultiPoint(ps).centroid
+                    if 'wheelchair' in el['tags'].keys():
+                        wheelchair=el['tags']['wheelchair']
+                    else:
+                        wheelchair='no'
+        stop_info={'stop_id': el['id'], 'stop_name': name, 'stop_shape': geom.wkt, 'wheelchair': wheelchair}
+        return stop_info
     def fetch_stops(self, stops):
         if self.type=='subway' or self.type=='commuter' or self.type=='tram':
             tag='platform'
@@ -265,27 +326,39 @@ class OSM_Grabber:
         return self.stop2stop
     def cut_shape_by_stops(self, shape, stop_1, stop_2):
         # Эта функция привязывает точки остановок к шейпу маршрута, проводит линию между ними для получения сегмента пути.
+        # Проблема в том, что геометрия маршрута может быть начата позже, чем идет последовательность остановок, и он режет до конца
         stop_1_on_shape = shapely.ops.nearest_points(shape, stop_1)[0]
         stop_2_on_shape = shapely.ops.nearest_points(shape, stop_2)[0]
         dx_stop1=(stop_1.x-stop_1_on_shape.x)*1.2
         dy_stop1=(stop_1.y-stop_1_on_shape.y)*1.2
-        
+        print(stop_1_on_shape)
+        print(stop_2_on_shape)
         dx_stop2=(stop_2.x-stop_2_on_shape.x)*1.2
         dy_stop2=(stop_2.y-stop_2_on_shape.y)*1.2
 
         ep_stop1=shapely.geometry.LineString([(stop_1.x-dx_stop1, stop_1.y-dy_stop1), (stop_1_on_shape.x+dx_stop1, stop_1_on_shape.y+dy_stop1)])
         ep_stop2=shapely.geometry.LineString([(stop_2.x-dx_stop2, stop_2.y-dy_stop2), (stop_2_on_shape.x+dx_stop2, stop_2_on_shape.y+dy_stop2)])
+        print(ep_stop1)
+        print(ep_stop2)
+        print('source')
+        print(shape)
         segment_start=shape.difference(ep_stop1)
-
+        print('segment_start')
+        print(segment_start)
+        
         if segment_start.is_empty==False:
             segment=segment_start.difference(ep_stop2)
         else:
             segment=shape.difference(ep_stop2)
+        print('segment_end')
+        print(segment)
+        print('\n')
+        # Логика неправильная. Может выбрать не тот сегмент, надо смотреть по касанию ep_stops с сегментом
         le=math.inf
         little=None
         if type(segment)==shapely.geometry.multilinestring.MultiLineString:
             for s in segment.geoms:
-                if le>s.length:
+                if le>s.length and s.intersects(ep_stop1.buffer(1)) and s.intersects(ep_stop2.buffer(1)):
                     le=s.length
                     little=s
             segment=little
