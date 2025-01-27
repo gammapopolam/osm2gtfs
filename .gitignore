@@ -4,3 +4,4 @@ logger_*
 bustags.ipynb
 ru-mow-bus-tags.csv
 ru_mow_osmgrabber
+grabber_1.py

@@ -230,10 +230,18 @@ class OSM_Grabber:
                             for g in member['geometry']:
                                 ps.append([g['lon'], g['lat']])
                         geom=shapely.geometry.MultiPoint(ps).centroid
-                    if 'wheelchair' in el['tags'].keys():
-                        wheelchair=el['tags']['wheelchair']
+                if 'wheelchair' in el['tags'].keys():
+                    #print(el['tags'])
+                    if "wheelchair:description" in el['tags'].keys():
+                        
+                        if el['tags']['wheelchair:description']=="cross-platform":
+                            wheelchair='cross-platform'
+                        else:
+                            wheelchair='limited'
                     else:
-                        wheelchair='no'
+                        wheelchair=el['tags']['wheelchair']
+                else:
+                    wheelchair='no'
         stop_info={'stop_id': el['id'], 'stop_name': name, 'stop_shape': geom.wkt, 'wheelchair': wheelchair}
         return stop_info
     def fetch_stops(self, stops):
@@ -282,10 +290,17 @@ class OSM_Grabber:
                             for g in member['geometry']:
                                 ps.append([g['lon'], g['lat']])
                         geom=shapely.geometry.MultiPoint(ps).centroid
-                    if 'wheelchair' in el['tags'].keys():
-                        wheelchair=el['tags']['wheelchair']
+                if 'wheelchair' in el['tags'].keys():
+                    #print(el['tags'])
+                    if "wheelchair:description" in el['tags'].keys():
+                        if el['tags']['wheelchair:description']=="cross-platform":
+                            wheelchair='cross-platform'
+                        else:
+                            wheelchair='limited'
                     else:
-                        wheelchair='no'
+                        wheelchair=el['tags']['wheelchair']
+                else:
+                    wheelchair='no'
                 stops_info.append({'stop_id': el['id'], 'stop_name': name, 'stop_shape': geom.wkt, 'wheelchair': wheelchair}) #!!
         return stops_info
     def wgs84toutm(self, geom, utmzone='EPSG:32637'):
@@ -310,12 +325,15 @@ class OSM_Grabber:
         for trip in tqdm(trips, ncols=100, ascii=True, desc='s2s connections'):
             trip_s_sequence=trip['stop_sequence']
             #print(trip)
+            #print(trip['route_id'])
             shape_geom=self.wgs84toutm(shapely.wkt.loads(trip['shape']))
             trip_s_sequence_shapes=self.get_shapes_of_stop_sequence(trip_s_sequence)
             shape_geom_ext=self.insert_stops_into_route(shape_geom, trip_s_sequence_shapes)
             for i in range(len(trip_s_sequence)-1):
+                #print('sequences', trip_s_sequence[i], trip_s_sequence[i+1])
                 stop_1 = self.wgs84toutm(shapely.wkt.loads(list(filter(lambda x : str(x['stop_id'])==trip_s_sequence[i], self.stops))[0]['stop_shape']))
                 stop_2 = self.wgs84toutm(shapely.wkt.loads(list(filter(lambda x : str(x['stop_id'])==trip_s_sequence[i+1], self.stops))[0]['stop_shape']))
+                #print(stop_1, stop_2)
                 # The main point of next lines is that routes on rail network can be located along non-unique platforms (i.e. island and shore types of platform), but it is not working properly for bus and tram.
                 # That's why I use here platforms for subway/commuter and stop_positions for bus/tram
                 if self.type=='subway' or self.type=='commuter' or self.type=='tram':
@@ -353,7 +371,7 @@ class OSM_Grabber:
                 stop_2_index=i
             if stop_1_index>0 and stop_2_index>0 and stop_1_index<stop_2_index:
                 break
-        print(stop_1_index, stop_2_index)
+        #print(stop_1_index, stop_2_index)
         #if stop_1_index>stop_2_index:
         #    stop_1_index=len(refab_shape)-stop_1_index
         #print(stop_1_index, stop_2_index)
@@ -367,59 +385,15 @@ class OSM_Grabber:
             print(shapely.geometry.LineString(refab_shape[stop_1_index:]))
             return shapely.geometry.LineString(refab_shape[stop_1_index:])
         else:'''
-        print(shapely.geometry.LineString(refab_shape[stop_1_index:stop_2_index+1]))
+        #print(shapely.geometry.LineString(refab_shape[stop_1_index:stop_2_index+1]))
         res=shapely.geometry.LineString(refab_shape[stop_1_index:stop_2_index+1])
         if res.is_empty==False:
             return res
         else:
             return shapely.geometry.LineString((stop_1_on_shape, stop_2_on_shape))
 
-            
-    def cut_shape_by_stops2(self, shape, stop_1, stop_2):
-        # DEPRECATED
-        # Эта функция привязывает точки остановок к шейпу маршрута, проводит линию между ними для получения сегмента пути.
-        # Проблема в том, что геометрия маршрута может быть начата позже, чем идет последовательность остановок, и он режет до конца
-        stop_1_on_shape = shapely.ops.nearest_points(shape, stop_1)[0]
-        stop_2_on_shape = shapely.ops.nearest_points(shape, stop_2)[0]
-        dx_stop1=(stop_1.x-stop_1_on_shape.x)*1.2
-        dy_stop1=(stop_1.y-stop_1_on_shape.y)*1.2
-        #print(stop_1_on_shape)
-        #print(stop_2_on_shape)
-        dx_stop2=(stop_2.x-stop_2_on_shape.x)*1.2
-        dy_stop2=(stop_2.y-stop_2_on_shape.y)*1.2
-
-        ep_stop1=shapely.geometry.LineString([(stop_1.x-dx_stop1, stop_1.y-dy_stop1), (stop_1_on_shape.x+dx_stop1, stop_1_on_shape.y+dy_stop1)])
-        ep_stop2=shapely.geometry.LineString([(stop_2.x-dx_stop2, stop_2.y-dy_stop2), (stop_2_on_shape.x+dx_stop2, stop_2_on_shape.y+dy_stop2)])
-        #print(ep_stop1)
-        #print(ep_stop2)
-        #print('source')
-        #print(shape)
-        segment_start=shape.difference(ep_stop1)
-        #print('segment_start')
-        #print(segment_start)
-        
-        if segment_start.is_empty==False:
-            segment=segment_start.difference(ep_stop2)
-        else:
-            segment=shape.difference(ep_stop2)
-        #print('segment_end')
-        #print(segment)
-        #print('\n')
-        # Логика неправильная. Может выбрать не тот сегмент, надо смотреть по касанию ep_stops с сегментом
-        le=math.inf
-        little=None
-        segment2=None
-        #  and s.intersects(ep_stop1.buffer(1)) and s.intersects(ep_stop2.buffer(1)) and s.length<12000
-        if type(segment)==shapely.geometry.multilinestring.MultiLineString:
-            for s in segment.geoms:
-                if le>s.length:
-                    le=s.length
-                    little=s
-                
-            segment2=little
-        return segment2
     def cut_shape_by_stops_bus(self, shape, stop_1, stop_2):
-        
+        #print(shape)
         i_s, i_e = [], []
         l=len(list(shape.coords))
         #print(l)
@@ -428,21 +402,38 @@ class OSM_Grabber:
             v=list(shape.coords)[i]
             if shapely.geometry.Point(v).equals(stop_1):
                 i_s.append(i)
+                #print('append i_s', i)
             if shapely.geometry.Point(v).equals(stop_2):
                 i_e.append(i)
+                #print('append i_e', i)
         #print(i_s, i_e)
         if len(i_s)>1 and len(i_e)==1:
+            vars=[]
+            #print(1)
             for k in range(len(i_s)):
-                if abs(i_e[0]-i_s[k])<50:
-                    print(i_s[k], i_e[0])
-                    return shapely.geometry.LineString(list(shape.coords)[i_s[k]:i_e[0]+1])
+                #print(i_s[k], i_e[0], i_s[k]-i_e[0])
+                #if abs(i_e[0]-i_s[k])<100 and i_e[0]>i_s[k]:
+                vars.append((i_s[k], i_e[0], i_s[k]-i_e[0]))
+            #print(vars)
+            need=min(vars, key=lambda x: x[-1])
+            #print(need)
+            return shapely.geometry.LineString(list(shape.coords)[need[0]:need[1]+1])
+            #return shapely.geometry.LineString(list(shape.coords)[i_s[k]:i_e[0]+1])
         elif len(i_e)>1 and len(i_s)==1:
+            vars=[]
+            #print(2)
             for k in range(len(i_e)):
-                if abs(i_e[k]-i_s[0])<50:
-                    print(i_s[0], i_e[k])
-                    return shapely.geometry.LineString(list(shape.coords)[i_s[0]:i_e[k]+1])
+                vars.append((i_s[0], i_e[k], i_s[0]-i_e[k]))
+                #if abs(i_e[k]-i_s[0])<50 and i_e[k]>i_s[0]:
+                    #print(i_s[0], i_e[k])
+                    #return shapely.geometry.LineString(list(shape.coords)[i_s[0]:i_e[k]+1])
+            #print(vars)
+            need=min(vars, key=lambda x: x[-1])
+            #print(need)
+            return shapely.geometry.LineString(list(shape.coords)[need[0]:need[1]+1])
         else:
-            print(i_s[0], i_e[0])
+            #print(3)
+            #print(i_s[0], i_e[0])
             return shapely.geometry.LineString(list(shape.coords)[i_s[0]:i_e[0]+1])
     def insert_stops_into_route(self, route, stops):
         # Create a list to hold all points (original route + stops)
@@ -550,3 +541,48 @@ class OSM_Grabber:
             if p not in ordered[-2:]:
                 ordered.append(p)
         return shapely.geometry.LineString(ordered)
+
+            
+    def cut_shape_by_stops2(self, shape, stop_1, stop_2):
+        # DEPRECATED
+        # Эта функция привязывает точки остановок к шейпу маршрута, проводит линию между ними для получения сегмента пути.
+        # Проблема в том, что геометрия маршрута может быть начата позже, чем идет последовательность остановок, и он режет до конца
+        stop_1_on_shape = shapely.ops.nearest_points(shape, stop_1)[0]
+        stop_2_on_shape = shapely.ops.nearest_points(shape, stop_2)[0]
+        dx_stop1=(stop_1.x-stop_1_on_shape.x)*1.2
+        dy_stop1=(stop_1.y-stop_1_on_shape.y)*1.2
+        #print(stop_1_on_shape)
+        #print(stop_2_on_shape)
+        dx_stop2=(stop_2.x-stop_2_on_shape.x)*1.2
+        dy_stop2=(stop_2.y-stop_2_on_shape.y)*1.2
+
+        ep_stop1=shapely.geometry.LineString([(stop_1.x-dx_stop1, stop_1.y-dy_stop1), (stop_1_on_shape.x+dx_stop1, stop_1_on_shape.y+dy_stop1)])
+        ep_stop2=shapely.geometry.LineString([(stop_2.x-dx_stop2, stop_2.y-dy_stop2), (stop_2_on_shape.x+dx_stop2, stop_2_on_shape.y+dy_stop2)])
+        #print(ep_stop1)
+        #print(ep_stop2)
+        #print('source')
+        #print(shape)
+        segment_start=shape.difference(ep_stop1)
+        #print('segment_start')
+        #print(segment_start)
+        
+        if segment_start.is_empty==False:
+            segment=segment_start.difference(ep_stop2)
+        else:
+            segment=shape.difference(ep_stop2)
+        #print('segment_end')
+        #print(segment)
+        #print('\n')
+        # Логика неправильная. Может выбрать не тот сегмент, надо смотреть по касанию ep_stops с сегментом
+        le=math.inf
+        little=None
+        segment2=None
+        #  and s.intersects(ep_stop1.buffer(1)) and s.intersects(ep_stop2.buffer(1)) and s.length<12000
+        if type(segment)==shapely.geometry.multilinestring.MultiLineString:
+            for s in segment.geoms:
+                if le>s.length:
+                    le=s.length
+                    little=s
+                
+            segment2=little
+        return segment2
