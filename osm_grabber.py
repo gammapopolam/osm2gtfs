@@ -19,7 +19,10 @@ class OSM_Grabber:
         self.type=type
         self.area=3600000000 + area
         if self.type!='commuter':
-            base_query=f'[out:json][timeout:25];area({self.area})->.searchArea;nwr["route"={self.type}]'
+            if self.type=='bus':
+                base_query=f'[out:json][timeout:25];area({self.area})->.searchArea;nwr["route"~"bus|trolleybus"]'
+            else:
+                base_query=f'[out:json][timeout:25];area({self.area})->.searchArea;nwr["route"={self.type}]'
             if network is not None:
                 base_query+=f'["network"="{network}"]'
             if operator is not None:
@@ -139,11 +142,15 @@ class OSM_Grabber:
                         elif member['role']=='' and member['type']=='way':
                             trip_shape.append(member)
                 trip_shape_g=self.build_shape(trip_shape)
+                print(elem['id'])
                 if self.type=='bus' or self.type=='trolleybus':
                     shape_merged=self.merge_shape_simple(trip_shape_g)
                 else:
                     #print('merged shape')
                     shape_merged=shapely.ops.linemerge(trip_shape_g)
+                    print(shape_merged)
+                    if type(shape_merged)==shapely.geometry.multilinestring.MultiLineString:
+                        shape_merged=self.merge_shape_simple(trip_shape_g)
                     if shape_merged.coords[0]==shape_merged.coords[-1]: #circle
                         #find first stop, find nearest vertex to stop, start from this vertex
                         first_ref=trip_stop_sequence[0]
@@ -269,7 +276,7 @@ class OSM_Grabber:
             data.extend(partial_data)
         for el in data:
             if 'tags' in el.keys():
-                if 'public_transport' in el['tags'].keys():
+                if 'public_transport' in el['tags'].keys() or 'disused:public_transport' in el['tags'].keys(): # обманка для некоторых приколов в СПб
                     if 'name' in el['tags'].keys():
                         name=el['tags']['name']
                     # need refactor bc previously there was platforms 
@@ -431,10 +438,14 @@ class OSM_Grabber:
             need=min(vars, key=lambda x: x[-1])
             #print(need)
             return shapely.geometry.LineString(list(shape.coords)[need[0]:need[1]+1])
-        else:
+        elif len(i_e)==1 and len(i_s)==1:
             #print(3)
             #print(i_s[0], i_e[0])
             return shapely.geometry.LineString(list(shape.coords)[i_s[0]:i_e[0]+1])
+        else:
+            # Avoid issues with strange shapes (см. А-482 Шёлково-СПб)
+            #print(0)
+            return shapely.geometry.LineString((stop_1, stop_2))
     def insert_stops_into_route(self, route, stops):
         # Create a list to hold all points (original route + stops)
         all_points = list(route.coords)

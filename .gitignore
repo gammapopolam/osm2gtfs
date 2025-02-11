@@ -5,3 +5,7 @@ bustags.ipynb
 ru-mow-bus-tags.csv
 ru_mow_osmgrabber
 grabber_1.py
+ru_spe_osmgrabber/*
+kryukovo/*
+kja/*
+Grabber_kja.ipynb
