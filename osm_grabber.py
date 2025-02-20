@@ -142,7 +142,7 @@ class OSM_Grabber:
                         elif member['role']=='' and member['type']=='way':
                             trip_shape.append(member)
                 trip_shape_g=self.build_shape(trip_shape)
-                print(elem['id'])
+                #print(elem['id'])
                 if self.type=='bus' or self.type=='trolleybus':
                     shape_merged=self.merge_shape_simple(trip_shape_g)
                 else:
