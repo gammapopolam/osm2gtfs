@@ -10,12 +10,15 @@ from tqdm import tqdm
 import pyproj
 
 class OSM_Grabber:
-    def __init__(self, type='bus', network=None, operator=None, area=None):
+    def __init__(self, type='bus', network=None, operator=None, area=None, url=None):
         # types of routes: bus, tram, trolleybus, subway, commuter
         # network (Московский транспорт)
         # operator (ГУП "Мосгортранс")
         # area - area id
-        self.overpass_url="https://overpass-api.de/api/interpreter"
+        if url is not None:
+            self.overpass_url = url
+        else:
+            self.overpass_url="https://overpass-api.de/api/interpreter"
         self.type=type
         self.area=3600000000 + area
         if self.type!='commuter':
@@ -57,6 +60,8 @@ class OSM_Grabber:
                         json.dump(self.s2s, f, ensure_ascii=False)
             if s2s==True:
                 return self.trips, self.stops, self.s2s
+        else:
+            raise ValueError(response.status_code)
     def check_ptv2(self, data):
         valid=[]
         invalid=[]
@@ -121,6 +126,10 @@ class OSM_Grabber:
                     trip_ref=elem['tags']['ref']
                 else:
                     trip_ref='UNKNOWN'
+                if 'wheelchair' in elem['tags'].keys():
+                    trip_wa=elem['tags']['wheelchair']
+                else:
+                    trip_wa='no'
                 
                 trip_stop_sequence=[]
                 trip_shape=[]
@@ -170,7 +179,7 @@ class OSM_Grabber:
                         
                     #print(shape_merged)
                 route_id=elem['id']
-                trips.append({'stop_sequence': trip_stop_sequence, 'shape': shape_merged.wkt, 'colour': trip_colour, 'ref': trip_ref, 'route_id': route_id, 'route_name': trip_name, 'route_master': 'NONE', 'route_master_name': 'NONE', 'route_master_ref': 'NONE'})
+                trips.append({'stop_sequence': trip_stop_sequence, 'shape': shape_merged.wkt, 'colour': trip_colour, 'ref': trip_ref, 'wheelchair': trip_wa, 'route_id': route_id, 'route_name': trip_name, 'route_master': 'NONE', 'route_master_name': 'NONE', 'route_master_ref': 'NONE'})
         for elem in data:
             if 'route_master' in elem['tags']:
                 #print(elem['tags'])
@@ -268,7 +277,7 @@ class OSM_Grabber:
             partial=stops[i:i+100]
             ref='id:'+','.join(partial)
             print(f'partial {i}:{i+100}', end=' ')
-            time.sleep(1)
+            time.sleep(2)
             #print(platform_query(ref))
             response = requests.get(self.overpass_url, params={'data': platform_query(ref)})
             print(response.status_code)
